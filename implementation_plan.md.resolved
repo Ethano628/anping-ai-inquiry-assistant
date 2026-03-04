@@ -1,0 +1,277 @@
+# 阶段 3：Supabase 数据接入闭环 (Stage 3: Supabase Data Integration)
+
+## A. 目标
+完成询盘核心业务的“Supabase 数据读取闭环”。优先利用现有的前后端边界，在不改变 UI 结构、不破坏客户端本地状态逻辑的前提下，将 `inquiryService` 的底层数据源从本地 mock 数据平滑替换为真实 Supabase 数据库。
+
+## B. 需要修改/新增的文件
+1. **[新增]** `src/lib/supabase.ts`：全局 Supabase Client 实例，采用 fail-fast 机制确保环境变量存在。
+2. **[修改]** [src/services/inquiryService.ts](file:///e:/anping-ai-inquiry-assistant/src/services/inquiryService.ts)：增加 `server-only` 限制，重写数据获取逻辑对接 Supabase。
+3. **无需修改**：页面组件 ([page.tsx](file:///e:/anping-ai-inquiry-assistant/src/app/page.tsx)) 和所有的 Client 组件 完全不受影响，依旧保持现有的前后端职责划分。
+
+## C. Supabase 表结构设计说明
+设计严格对齐现有 `@/types/index.ts` 中的接口声明：
+- **`customers`**：包含 `status` 枚举 (`high_intent` | `price_comparison` | `sample_request` | `invalid`)。
+- **`inquiries`**：关联 `customer_id`。状态 `status` 精确对齐 (`new` | `replied` | `following_up` | `closed` | `rejected`)。增加 `updated_at` 自动更新触发器。
+- **`follow_up_tasks`**：状态 `status` 精确对齐 (`pending` | `completed` | `overdue`)。
+
+前端继续使用 camelCase，我们在查询时利用 Supabase 的列别名机制 (`column_name:aliasName`) 将蛇形命名映射为前端定义的驼峰命名。
+
+## D. 可直接执行的 SQL (包含 Schema 与种子数据)
+
+```sql
+-- 开启 uuid 支持
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. 客户表 (Customers)
+CREATE TABLE customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    country TEXT NOT NULL,
+    company TEXT,
+    email TEXT NOT NULL,
+    phone TEXT,
+    status TEXT CHECK (status IN ('high_intent', 'price_comparison', 'sample_request', 'invalid')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. 询盘表 (Inquiries)
+CREATE TABLE inquiries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+    product_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    source TEXT NOT NULL,
+    status TEXT CHECK (status IN ('new', 'replied', 'following_up', 'closed', 'rejected')),
+    priority TEXT CHECK (priority IN ('high', 'medium', 'low')),
+    tags TEXT[],
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 自动更新 updatedAt 的触发器函数
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_inquiries_updated_at
+    BEFORE UPDATE ON inquiries
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- 3. 跟进任务表 (Follow Up Tasks)
+CREATE TABLE follow_up_tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    inquiry_id UUID REFERENCES inquiries(id) ON DELETE CASCADE,
+    assigned_to_user TEXT NOT NULL,
+    due_date TIMESTAMPTZ NOT NULL,
+    status TEXT CHECK (status IN ('pending', 'completed', 'overdue')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 插入初始种子数据 (Seed Data)
+-- 保障页面切换数据源后有内容可供预览
+-- ==========================================
+
+-- 插入一个测试客户并返回 ID 以便创建后续数据
+DO $$
+DECLARE
+    cid1 UUID;
+    cid2 UUID;
+    iid1 UUID;
+    iid2 UUID;
+BEGIN
+    -- 创建 Customers
+    INSERT INTO customers (name, country, company, email, phone, status) 
+    VALUES ('John Smith', 'United States', 'BuildRight USA', 'john@buildright.com', '+1-555-0100', 'high_intent')
+    RETURNING id INTO cid1;
+
+    INSERT INTO customers (name, country, company, email, status) 
+    VALUES ('Hans Müller', 'Germany', 'BauTech GmbH', 'hans@bautech.de', 'price_comparison')
+    RETURNING id INTO cid2;
+
+    -- 创建 Inquiries
+    INSERT INTO inquiries (customer_id, product_type, content, source, status, priority, tags)
+    VALUES (
+        cid1, 
+        'Welded Wire Mesh', 
+        'Hi, we need 5 containers of 2x2 inch galvanized welded wire mesh (BWG 12). Please quote CIF Los Angeles. Urgent requirement.', 
+        'Website', 
+        'new', 
+        'high', 
+        ARRAY['Urgent', 'High Intent']
+    ) RETURNING id INTO iid1;
+
+    INSERT INTO inquiries (customer_id, product_type, content, source, status, priority, tags)
+    VALUES (
+        cid2, 
+        'Stainless Steel Wire Mesh', 
+        'Looking for 304 SS wire mesh, 100 mesh count, 1m x 30m rolls. Looking for your best price per roll.', 
+        'Alibaba', 
+        'following_up', 
+        'medium', 
+        ARRAY['Price Comparison']
+    ) RETURNING id INTO iid2;
+
+    -- 创建 FollowUpTasks
+    INSERT INTO follow_up_tasks (inquiry_id, assigned_to_user, due_date, status, notes)
+    VALUES (
+        iid1,
+        'u1',
+        NOW() + INTERVAL '1 day',
+        'pending',
+        'Draft quote based on current shipping rates to LA.'
+    );
+
+    INSERT INTO follow_up_tasks (inquiry_id, assigned_to_user, due_date, status, notes)
+    VALUES (
+        iid2,
+        'u1',
+        NOW() - INTERVAL '1 day',
+        'overdue',
+        'Check if they reviewed the pricing sent on Tuesday.'
+    );
+END $$;
+```
+
+## E. 具体代码
+
+### 1. 新增 `src/lib/supabase.ts` (Fail-Fast 机制)
+```typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Fail-Fast：禁止静默失败，强制要求正确配置环境变量
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY must be set in .env.local');
+}
+
+// 供服务端或客户端基础使用的匿名客户端
+export const supabase = createClient(supabaseUrl, supabaseKey);
+```
+
+### 2. 改造 [src/services/inquiryService.ts](file:///e:/anping-ai-inquiry-assistant/src/services/inquiryService.ts) (安全与严谨查询)
+```typescript
+import 'server-only'; // 强制此文件仅能在服务端运行，防止打入客户端 Bundle
+import { supabase } from '@/lib/supabase';
+import { Inquiry, Customer, FollowUpTask } from '@/types';
+
+export interface InquiryDetail extends Inquiry {
+    customer: Customer | null;
+    tasks: FollowUpTask[];
+}
+
+export const inquiryService = {
+    getAllInquiries: async (): Promise<(Inquiry & { customer: Customer | null })[]> => {
+        const { data, error } = await supabase
+            .from('inquiries')
+            .select(`
+                id,
+                customerId:customer_id,
+                productType:product_type,
+                content,
+                source,
+                status,
+                priority,
+                tags,
+                createdAt:created_at,
+                updatedAt:updated_at,
+                customer:customers (
+                    id, 
+                    name, 
+                    country, 
+                    company, 
+                    email, 
+                    phone, 
+                    status, 
+                    createdAt:created_at
+                )
+            `)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching inquiries from Supabase:', error);
+            return [];
+        }
+
+        return data.map((item: any) => ({
+            ...item,
+            customer: Array.isArray(item.customer) ? item.customer[0] : item.customer
+        })) as (Inquiry & { customer: Customer | null })[];
+    },
+
+    getInquiryDetails: async (id: string): Promise<InquiryDetail | null> => {
+        // 进行初步 UUID 简单校验，防止向 Supabase 发起注定 400 的格式错误请求
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+        if (!isValidUUID) {
+            return null; // 非法 UUID 直接返回 null，触发 404
+        }
+
+        const { data: inquiry, error } = await supabase
+            .from('inquiries')
+            .select(`
+                id,
+                customerId:customer_id,
+                productType:product_type,
+                content,
+                source,
+                status,
+                priority,
+                tags,
+                createdAt:created_at,
+                updatedAt:updated_at,
+                customer:customers (
+                    id, name, country, company, email, phone, status, createdAt:created_at
+                ),
+                tasks:follow_up_tasks (
+                    id, 
+                    inquiryId:inquiry_id, 
+                    assignedToUser:assigned_to_user, 
+                    dueDate:due_date, 
+                    status, 
+                    notes, 
+                    createdAt:created_at
+                )
+            `)
+            .eq('id', id)
+            .maybeSingle(); // 使用 maybeSingle 确保当找不到记录时不抛出异常而是返回 null/空
+
+        if (error || !inquiry) {
+            if (error) console.error('Error fetching inquiry details from Supabase:', error.message);
+            return null;
+        }
+
+        return {
+            ...inquiry,
+            customer: Array.isArray(inquiry.customer) ? inquiry.customer[0] : inquiry.customer,
+            tasks: inquiry.tasks || []
+        } as InquiryDetail;
+    }
+};
+```
+
+## F. 替换步骤
+1. 安装依赖：`npm install @supabase/supabase-js`
+2. 在项目根目录的 `.env.local` 填入您的 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_ANON_KEY`。
+3. 把上述 **C 部分的 SQL** 在 Supabase 面板的 SQL Editor 中一次性执行完毕（此脚本包含了结构以及让您一上来不看白屏的种子数据），并在 Auth 配置中先确保相关表可以被 Public `SELECT` 以畅通读取。
+4. 将上方 **E.1** 的代码存为 `src/lib/supabase.ts`。
+5. 将上方 **E.2** 的代码全量覆盖现有 [src/services/inquiryService.ts](file:///e:/anping-ai-inquiry-assistant/src/services/inquiryService.ts)。
+
+## G. 自检清单
+- [ ] 确保 `.env.local` 存在并填写正确，否则 `supabase.ts` 会按预期 Fail-Fast 报错。
+- [ ] [inquiryService.ts](file:///e:/anping-ai-inquiry-assistant/src/services/inquiryService.ts) 顶部存在 `import 'server-only'` 标记。
+- [ ] 列表页能正常渲染 `SELECT` 出的数据（包含 `customer` 连表信息）。
+- [ ] 详情页输入合规 UUID 能正常显示。
+- [ ] 详情页输入老版本类似 `i1` 或者其它乱拼的字符串（非法 UUID / 找不到 UUID），皆无缝返回 `null` 并进入 `notFound()` 处理，不触发框架级 500 Error。
+- [ ] 现有的 [InquiryDetailClient](file:///e:/anping-ai-inquiry-assistant/src/components/inquiries/InquiryDetailClient.tsx#14-202) 不受影响，本地点击 "Mark as Replied" 按钮继续呈现原有操作反馈。
+
+## H. 风险与后续考量
+- **数据库 RLS (Row Level Security)**：如果您尚未进行精细读写权限控制，测试时可在真实环境中先不开启 RLS，或对三张表增加全开放的 `SELECT` policy 确保匿名服务端可读。
+- **本地写逻辑剥离**：由于本次目标只改`Source of Truth`读取，目前所有的 [InquiryDetailClient](file:///e:/anping-ai-inquiry-assistant/src/components/inquiries/InquiryDetailClient.tsx#14-202) 均为本地状态更新。下一阶段需考虑补齐 UPDATE 路由和 Server Actions，再配合刚刚创建的 `updated_at` 触发器运作。
