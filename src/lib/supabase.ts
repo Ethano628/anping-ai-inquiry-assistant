@@ -1,12 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Fail-Fast：禁止静默失败，强制要求正确配置环境变量
-if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY must be set in .env.local');
-}
+// 在构建时环境变量可能不存在，使用延迟初始化避免构建失败
+let _supabase: SupabaseClient | null = null;
 
-// 供服务端或客户端基础使用的匿名客户端
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+    get(_target, prop) {
+        if (!_supabase) {
+            if (!supabaseUrl || !supabaseKey) {
+                throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+            }
+            _supabase = createClient(supabaseUrl, supabaseKey);
+        }
+        return (_supabase as any)[prop];
+    }
+});
