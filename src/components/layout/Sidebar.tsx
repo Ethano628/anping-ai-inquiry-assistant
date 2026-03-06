@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
     LayoutDashboard,
     MessageSquarePlus,
     FolderOpen,
     Bell,
     Settings,
+    LogOut,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import type { User } from '@supabase/supabase-js';
 
 const mainMenuItems = [
     { label: '仪表盘', icon: LayoutDashboard, href: '/dashboard' },
@@ -23,6 +27,30 @@ const systemMenuItems = [
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const [user, setUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        const supabase = createClient();
+        supabase.auth.getUser().then(({ data }) => setUser(data.user));
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const handleLogout = async () => {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.push('/login');
+        router.refresh();
+    };
+
+    // 从邮箱提取用户名
+    const displayName = user?.email?.split('@')[0] || '用户';
+    const initial = displayName.charAt(0).toUpperCase();
 
     return (
         <aside className="w-[200px] bg-white border-r border-[#E5E7EB] flex flex-col h-screen shrink-0">
@@ -92,12 +120,19 @@ export default function Sidebar() {
             <div className="px-4 py-4 border-t border-[#E5E7EB]">
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#10B981] flex items-center justify-center text-white font-bold text-[14px] shrink-0">
-                        E
+                        {initial}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-[#111827] truncate">Ethan</p>
-                        <p className="text-[11px] text-[#9CA3AF] truncate">安平丝网贸易</p>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-[#111827] truncate">{displayName}</p>
+                        <p className="text-[11px] text-[#9CA3AF] truncate">{user?.email || ''}</p>
                     </div>
+                    <button
+                        onClick={handleLogout}
+                        title="登出"
+                        className="text-[#9CA3AF] hover:text-[#EF4444] transition-colors shrink-0"
+                    >
+                        <LogOut size={16} />
+                    </button>
                 </div>
             </div>
         </aside>

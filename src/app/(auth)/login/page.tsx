@@ -1,83 +1,96 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
+import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
+    const router = useRouter();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
+        const supabase = createClient();
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+        if (error) {
+            setError(error.message === 'Invalid login credentials'
+                ? '邮箱或密码错误'
+                : error.message);
+            setLoading(false);
+        } else {
+            router.push('/dashboard');
+            router.refresh();
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-slate-900">
-                    Sign in to your account
-                </h2>
-                <p className="mt-2 text-center text-sm text-slate-600">
-                    Anping AI Inquiry Assistant
-                </p>
-            </div>
+        <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center px-4">
+            <div className="w-full max-w-[400px]">
+                {/* Logo */}
+                <div className="text-center mb-8">
+                    <h1 className="brand-logo text-[36px] leading-none tracking-tight">
+                        <span className="brand-trade">Trade</span>
+                        <span className="brand-ai">AI</span>
+                    </h1>
+                    <p className="text-[14px] text-[#9CA3AF] mt-2">外贸询盘 AI 智能助手</p>
+                </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-slate-200">
-                    <form className="space-y-6" action="#" method="POST">
+                {/* Login Card */}
+                <div className="card p-8">
+                    <h2 className="text-[18px] font-bold text-[#111827] mb-6">登录账号</h2>
+
+                    <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                                Email address
-                            </label>
-                            <div className="mt-1">
-                                <input
-                                    id="email"
-                                    name="email"
-                                    type="email"
-                                    autoComplete="email"
-                                    required
-                                    defaultValue="admin@anping-ai.com"
-                                    className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                />
-                            </div>
+                            <label className="text-[12px] font-medium text-[#6B7280] block mb-1.5">邮箱地址</label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                required
+                                className="w-full px-3 py-2.5 text-[14px] bg-[#F0F4F8] border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10B981]/30 focus:border-[#10B981]"
+                            />
                         </div>
-
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                                Password
-                            </label>
-                            <div className="mt-1">
-                                <input
-                                    id="password"
-                                    name="password"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    required
-                                    defaultValue="password"
-                                    className="block w-full appearance-none rounded-md border border-slate-300 px-3 py-2 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                />
-                            </div>
+                            <label className="text-[12px] font-medium text-[#6B7280] block mb-1.5">密码</label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                placeholder="至少 6 位"
+                                required
+                                className="w-full px-3 py-2.5 text-[14px] bg-[#F0F4F8] border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10B981]/30 focus:border-[#10B981]"
+                            />
                         </div>
 
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                                <input
-                                    id="remember-me"
-                                    name="remember-me"
-                                    type="checkbox"
-                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-900">
-                                    Remember me
-                                </label>
-                            </div>
+                        {error && (
+                            <p className="text-[13px] text-[#EF4444] bg-[#FEE2E2] px-3 py-2 rounded-lg">{error}</p>
+                        )}
 
-                            <div className="text-sm">
-                                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                                    Forgot your password?
-                                </a>
-                            </div>
-                        </div>
-
-                        <div>
-                            <Link
-                                href="/dashboard"
-                                className="flex w-full justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                            >
-                                Sign in (Demo)
-                            </Link>
-                        </div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full py-2.5 text-[14px] font-semibold text-white bg-[#10B981] rounded-lg hover:bg-[#059669] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                        >
+                            {loading ? <><Loader2 size={16} className="animate-spin" /> 登录中...</> : '登 录'}
+                        </button>
                     </form>
+
+                    <p className="text-center text-[13px] text-[#9CA3AF] mt-6">
+                        还没有账号？
+                        <Link href="/register" className="text-[#10B981] font-medium hover:underline ml-1">
+                            立即注册
+                        </Link>
+                    </p>
                 </div>
             </div>
         </div>
