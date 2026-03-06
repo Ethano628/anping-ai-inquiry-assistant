@@ -1,24 +1,54 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-:root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --foreground: #f8fafc;
-  }
+  --font-sans: 'Noto Sans SC', 'Sora', system-ui, sans-serif;
+  --font-brand: 'Sora', sans-serif;
+  --color-primary: #10B981;
+  --color-primary-light: #D1FAE5;
+  --color-primary-dark: #059669;
+  --color-page-bg: #F5F7FA;
+  --color-card-bg: #FFFFFF;
+  --color-input-bg: #F0F4F8;
+  --color-blue: #3B82F6;
+  --color-orange: #F59E0B;
+  --color-red: #EF4444;
+  --color-text-primary: #111827;
+  --color-text-secondary: #9CA3AF;
+  --color-border: #E5E7EB;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text-primary);
+  background: var(--color-page-bg);
+  font-family: 'Noto Sans SC', 'Sora', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* TradeAI 品牌标识 */
+.brand-logo .brand-trade {
+  color: var(--color-primary);
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+}
+
+.brand-logo .brand-ai {
+  color: var(--color-text-primary);
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+}
+
+/* 侧边栏导航项激活态 */
+.nav-item-active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* 卡片统一阴影 */
+.card {
+  background: var(--color-card-bg);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--color-border);
 }

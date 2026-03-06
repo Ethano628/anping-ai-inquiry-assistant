@@ -1,3 +1,4 @@
+// ===== 客户相关 =====
 export type CustomerStatus = 'high_intent' | 'price_comparison' | 'sample_request' | 'invalid';
 
 export interface Customer {
@@ -11,22 +12,44 @@ export interface Customer {
     createdAt: string;
 }
 
-export type Priority = 'high' | 'medium' | 'low';
-export type InquiryStatus = 'new' | 'replied' | 'following_up' | 'closed' | 'rejected';
+// ===== 询盘相关 =====
+export type Priority = 'high' | 'medium' | 'low' | 'ignore';
+export type InquiryStatus = 'pending' | 'replied' | 'following_up' | 'closed' | 'abandoned';
+
+export interface InquiryRequirements {
+    product: string;
+    specs: string;
+    quantity: string;
+    destination: string;
+    concerns: string;
+    customerType: string;
+}
 
 export interface Inquiry {
     id: string;
-    customerId: string;
-    productType: string;
+    // 基础信息
     content: string;
-    source: string; // e.g., Alibaba, Website, WhatsApp
+    source: string;
     status: InquiryStatus;
     priority: Priority;
-    tags?: string[];
+    // AI 分析结果
+    aiScore: number | null;
+    aiSummary: string | null;
+    aiRequirements: InquiryRequirements | null;
+    aiReplyFormal: string | null;
+    aiReplyFriendly: string | null;
+    aiReplyConcise: string | null;
+    // 客户信息（直接嵌入，简化 MVP）
+    customerName: string;
+    customerCompany: string | null;
+    customerCountry: string | null;
+    customerEmail: string | null;
+    // 时间戳
     createdAt: string;
     updatedAt: string;
 }
 
+// ===== 用户 =====
 export interface User {
     id: string;
     name: string;
@@ -34,6 +57,7 @@ export interface User {
     role: 'admin' | 'sales';
 }
 
+// ===== 跟进任务 =====
 export interface FollowUpTask {
     id: string;
     inquiryId: string;
@@ -44,6 +68,7 @@ export interface FollowUpTask {
     createdAt: string;
 }
 
+// ===== 回复草稿 (保留兼容) =====
 export interface ReplyDraft {
     id: string;
     inquiryId: string;

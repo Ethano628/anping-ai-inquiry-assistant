@@ -1,8 +1,5 @@
-import { inquiryService } from '@/services/inquiryService';
-import InquiriesListClient from '@/components/inquiries/InquiriesListClient';
+import InquiryListClient from '@/components/inquiries/InquiryListClient';
 
-export default async function InquiriesPage() {
-    const inquiries = await inquiryService.getAllInquiries();
-
-    return <InquiriesListClient initialInquiries={inquiries} />;
+export default function InquiriesPage() {
+    return <InquiryListClient />;
 }
